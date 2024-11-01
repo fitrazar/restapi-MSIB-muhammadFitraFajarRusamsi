@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Exception;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -11,30 +12,39 @@ class ProductController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $products = Product::all();
+        try {
+            $query = Product::query();
 
-        if ($products->isEmpty()) {
+            if ($request->has('category')) {
+                $query->where('category', 'like', '%' . $request->category . '%');
+            }
+            if ($request->has('product_name')) {
+                $query->where('product_name', 'like', '%' . $request->product_name . '%');
+            }
+
+            $products = $query->get();
+
+            if ($products->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No products found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Products retrieved successfully',
+                'data' => $products
+            ], 200);
+        } catch (Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'No products found'
-            ], 404);
+                'message' => 'Failed to retrieve products',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Products retrieved successfully',
-            'data' => $products
-        ], 200);
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
     }
 
     /**
@@ -42,129 +52,103 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
-        $data = $request->json()->all();
-        // dd($data);
-        $validator = Validator::make($data, [
-            'product_name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'price' => 'required|numeric',
-        ]);
+        try {
+            $validator = Validator::make($request->all(), [
+                'product_name' => 'required|string|max:255',
+                'category' => 'required|string|max:255',
+                'description' => 'required|string',
+                'price' => 'required|numeric',
+            ]);
 
-        if ($validator->fails()) {
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validator->errors()
+                ], 400);
+            }
+
+            $product = Product::create($request->all());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Product created successfully',
+                'data' => $product
+            ], 201);
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'errors' => $validator->errors()
-            ], 400);
+                'message' => 'Failed to create product',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $product = Product::create([
-            'product_name' => $data['product_name'],
-            'description' => $data['description'],
-            'price' => $data['price'],
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Product created successfully',
-            'data' => [
-                'product_name' => $product->product_name,
-                'description' => $product->description,
-                'price' => $product->price
-            ]
-        ], 201);
     }
 
     /**
      * Display the specified resource.
      */
-    public function show($id)
+    public function show(Product $product)
     {
-        $product = Product::find($id);
-
-        if (!$product) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Product not found'
-            ], 404);
-        }
-
         return response()->json([
             'success' => true,
             'message' => 'Product retrieved successfully',
             'data' => $product
-        ],200);
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
+        ], 200);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, Product $product)
     {
-        $data = $request->all();
-        // dd($data);
-        $validator = Validator::make($data, [
-            'product_name' => 'sometimes|required|string|max:255',
-            'description' => 'sometimes|required|string',
-            'price' => 'sometimes|required|numeric',
-        ]);
+        try {
+            $validator = Validator::make($request->all(), [
+                'product_name' => 'sometimes|required|string|max:255',
+                'category' => 'sometimes|required|string|max:255',
+                'description' => 'sometimes|required|string',
+                'price' => 'sometimes|required|numeric',
+            ]);
 
-        if ($validator->fails()) {
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validator->errors()
+                ], 400);
+            }
+
+            $product->update($request->all());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Product updated successfully',
+                'data' => $product
+            ], 200);
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'errors' => $validator->errors()
-            ], 400);
+                'message' => 'Failed to update product',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $product = Product::find($id);
-
-        if (!$product) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Product not found'
-            ], 404);
-        }
-
-        $product->update($data);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Product updated successfully',
-            'data' => [
-                'id' => $product->id,
-                'product_name' => $product->product_name,
-                'description' => $product->description,
-                'price' => $product->price
-            ]
-        ], 200);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy(Product $product)
     {
-        $product = Product::find($id);
+        try {
+            $product->delete();
 
-        if (!$product) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Product deleted successfully'
+            ], 200);
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Product not found'
-            ], 404);
+                'message' => 'Failed to delete product',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $product->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Product deleted successfully'
-        ], 200);
     }
 }
